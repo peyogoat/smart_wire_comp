@@ -17,6 +17,7 @@
 #include "gagent_external.h"
 #include "mem.h"
 
+
 /** 协议全局变量 **/
 gizwitsProtocol_t gizwitsProtocol;
 
@@ -102,7 +103,7 @@ uint32 ICACHE_FLASH_ATTR gizGetIntervalsMs(uint32 lastRpMs)
 *
 * @return  tmp_value: 转换后的数据
 */
-static uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
+ uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
 {
     uint16_t    tmp_value;
     uint8_t     *index_1, *index_2;
@@ -682,8 +683,11 @@ int32_t ICACHE_FLASH_ATTR gizIssuedProcess(uint8_t *inData, uint32_t inLen,uint8
             break;
             
         case ACTION_READ_DEV_STATUS:
+
             gizDataPoints2ReportData(&gizwitsProtocol.gizLastDataPoint,&gizwitsProtocol.reportData.devStatus);
             gizwitsProtocol.reportData.action = ACTION_READ_DEV_STATUS_ACK;
+            gizwitsProtocol.reportData.devStatus.valueTimer[0] = localtaskInfo.cdCount+localtaskInfo.tmCount;
+            os_memcpy((uint8_t *)(&gizwitsProtocol.reportData.devStatus.valueTimer)+1, (uint8_t *)&localtaskInfo.timertaskBox, 375);
             os_memcpy(outData, (uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
             *outLen = sizeof(gizwitsReport_t);
             break;
@@ -780,6 +784,9 @@ void ICACHE_FLASH_ATTR gizTask(os_event_t * events)
         gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
         gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
         break;
+	case SIG_DO_TASK:
+		do_Task();
+		break;
     default:
         os_printf("---error sig! ---\n");
         break;
@@ -846,7 +853,7 @@ void ICACHE_FLASH_ATTR gizwitsInit(void)
 * @param [in] dataPoint 用户设备数据点
 * @return none
 */
-void ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
+int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
 {
     if(NULL == dataPoint)
     {

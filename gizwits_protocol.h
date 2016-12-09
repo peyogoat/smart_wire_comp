@@ -20,6 +20,7 @@
 #include "user_interface.h"
 #include "user_webserver.h"
 
+
 /**
 * @name 协议版本号
 * @{
@@ -57,7 +58,9 @@
 */
 #define SIG_ISSUED_DATA                         0x01                        ///< 协议处理任务
 #define SIG_PASSTHROUGH                         0x02                        ///< 协议透传任务
-#define SIG_IMM_REPORT                          0x09                        ///< 协议立即上报任务
+#define SIG_IMM_REPORT                          0x09
+#define SIG_DO_TASK								0xff
+///< 协议立即上报任务
 /**@} */
 
 /** WiFi模组配置参数*/
@@ -123,8 +126,8 @@ typedef enum
 /** 用户区设备状态结构体*/
 #pragma pack(1)
 typedef struct {
-  bool valueOnOff;
-  uint8_t valueTimer[100];
+  uint8_t valueOnOff;
+  uint8_t valueTimer[376];
   uint32_t valueSystime;
   uint32_t valueConsumption;
 } dataPoint_t;
@@ -138,7 +141,7 @@ typedef struct {
 /** 对应协议“4.10 WiFi模组控制设备”中的数据值"attr_vals" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
-  uint8_t valueTimer[100];
+  uint8_t valueTimer[376];
 } attrVals_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中“P0协议区”的标志位"attr_flags" + 数据值"attr_vals" */
@@ -150,14 +153,9 @@ typedef struct {
 /** 对应协议“4.9 设备MCU向WiFi模组主动上报当前状态”中的设备状态"dev_status" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
-
-  uint8_t valueTimer[100];
-
-
+  uint8_t valueTimer[376];
   uint16_t valueSystime;
   uint16_t valueConsumption;
-
-
 } devStatus_t;
 
 /** 对应协议“4.9 设备MCU向WiFi模组主动上报当前状态”中的 设备状态位"dev_status"  */ 
@@ -220,15 +218,50 @@ typedef struct
     gizwitsReport_t reportData;                     ///< 协议上报实际数据
     eventInfo_t issuedProcessEvent;                 ///< 控制事件
 }gizwitsProtocol_t;
-#pragma pack()
+
+#pragma pack(1)
+typedef struct
+{
+	uint8_t OnOff;
+	uint8_t Task_status;
+	uint8_t Week_Repeat;
+	uint8_t Time_Task;
+	uint16_t Time_Minute;
+	uint8_t Time_Second;
+} taskBox_t;
+
+#pragma pack(1)
+typedef struct
+{
+	uint8_t OnOff;
+	uint8_t Task_status;
+	uint8_t Week_Repeat;
+	uint8_t Time_Task;
+	uint16_t Time_Minute;
+	uint8_t Time_Second;
+	uint16_t Minute_Left;
+	uint8_t Second_Left;
+} local_cdtaskBox_t;
+
+#pragma pack(1)
+typedef struct
+{
+	uint8_t tmCount;
+	uint8_t cdCount;
+	taskBox_t timertaskBox[25];
+	local_cdtaskBox_t cdtaskBox[20];
+} taskInfo_t;
 
 /**@name Gizwits 用户API接口
 * @{
 */
+extern taskInfo_t localtaskInfo;
+extern gizwitsProtocol_t gizwitsProtocol;
 void gizwitsSetMode(uint8_t mode);
 void gizwitsInit(void);
-void ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint);
+int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint);
 int32_t gizwitsPassthroughData(uint8_t * data, uint32_t len);
+extern  uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value);
 /**@} */
 
 #endif
