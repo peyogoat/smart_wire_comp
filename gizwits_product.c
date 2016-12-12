@@ -1,7 +1,7 @@
 /**
 ************************************************************
 * @file         gizwits_product.c
-* @brief        Gizwits 控制协议处理,及平台相关的硬件初始化 
+* @brief        Gizwits 控制协议处理,及平台相关的硬件初始化
 * @author       Gizwits
 * @date         2016-09-05
 * @version      V03010201
@@ -19,9 +19,11 @@
 #include "gizwits_protocol.h"
 #include "driver/hal_key.h"
 
+taskInfo_t localtaskInfo;
 /** 用户区当前设备状态结构体*/
-extern dataPoint_t currentDataPoint;
-
+//extern dataPoint_t currentDataPoint;
+dataPoint_t currentDataPoint;
+//devStatus_t localDevStatus;
 /**@name Gizwits 用户API接口
 * @{
 */
@@ -61,19 +63,23 @@ int8_t gizwitsEventProcess(eventInfo_t *info, uint8_t *data, uint32_t len)
         os_printf("Evt: EVENT_ONOFF %d \n", currentDataPoint.valueOnOff);
         if(0x01 == currentDataPoint.valueOnOff)
         {
-          //user handle
+        	GPIO_OUTPUT_SET(BIT4, LOW_LEVEL);//user handle
         }
         else
         {
-          //user handle    
+        	GPIO_OUTPUT_SET(BIT4, HIGH_LEVEL);//user handle
         }
+        do_socketOnoff(currentDataPoint.valueOnOff,LOW_LEVEL);
+        do_socketOnoff((~currentDataPoint.valueOnOff)&0x1f,HIGH_LEVEL);
+
         break;
 
 
 
       case EVENT_TIMER:
-        os_printf("Evt: EVENT_TIMER\n");
-        memcpy((uint8_t *)&currentDataPoint.valueTimer,(uint8_t *)&dataPointPtr->valueTimer,sizeof(currentDataPoint.valueTimer));
+        os_printf("Evt: EVENT_TIMER\n:%X\n",dataPointPtr->valueTimer[0]);
+        os_memcpy((uint8_t *)&currentDataPoint.valueTimer,(uint8_t *)&dataPointPtr->valueTimer,sizeof(currentDataPoint.valueTimer));
+		setTimehandle(dataPointPtr);
         //user handle
         break;
 
@@ -88,8 +94,13 @@ int8_t gizwitsEventProcess(eventInfo_t *info, uint8_t *data, uint32_t len)
       case WIFI_DISCON_ROUTER:
         break;
       case WIFI_CON_M2M:
+    	  	os_printf("WIFI_CON_M2Mtest\n");
+			CountXinqi();
+			ConServer = 1;
         break;
       case WIFI_DISCON_M2M:
+  	  	os_printf("WIFI_CON_M2Mtest 0\n");
+			ConServer = 0;
         break;
       case WIFI_RSSI:
         os_printf("RSSI %d\n", wifiData->rssi);
@@ -106,3 +117,64 @@ int8_t gizwitsEventProcess(eventInfo_t *info, uint8_t *data, uint32_t len)
   return 0;
 }
 /**@} */
+
+void setTimehandle(dataPoint_t* setTimerBuf) {
+	uint8 var = 0 ;
+	control_task_t* setTimeDataIn = (control_task_t*) (((uint8_t *)setTimerBuf)+1);
+	uint8_t setTimehandlevar;
+	uint8_t* setTimehandlepoint;
+	switch (setTimeDataIn->taskBox[0].Task_status) {
+	case 0x01:
+	case 0x09:
+		os_printf("set Timer Task,TaskBuf is \n");
+		for (var = 0; var < 7; ++var)
+		{
+			os_printf("0x%X  ", &setTimeDataIn->taskBox[0].OnOff+var);
+		}
+		os_printf("\n");
+		os_memcpy(&localtaskInfo.timertaskBox[setTimeDataIn->taskBox[0].Time_Task],&setTimeDataIn->taskBox[0].OnOff,sizeof(uint8_t)*7);
+		setTimehandlepoint= (uint8_t*)&setTimeDataIn->taskBox[0].Time_Task;
+		for(setTimehandlevar=0;setTimehandlevar<7;setTimehandlevar++)
+		{
+			os_printf("setTimehandlevar:%d = 0x%x\n",setTimehandlevar,*(setTimehandlepoint));
+			setTimehandlepoint++;
+		}
+		localtaskInfo.tmCount++;
+		break;
+	case 0x05:
+		if(localtaskInfo.timertaskBox[setTimeDataIn->taskBox[0].Time_Task].Time_Task!=0xff)
+		{
+			os_memset((uint8_t*)&localtaskInfo.timertaskBox[setTimeDataIn->taskBox[0].Time_Task],0xFF,sizeof(uint8_t)*7);
+			os_printf("Delete Timer Task,TaskBuf is %X\n",setTimeDataIn->taskBox[0].Time_Task);
+			localtaskInfo.tmCount--;
+		}
+		break;
+	case 0x02:
+	case 0x12:
+		os_printf("set CountDown Task,TaskBuf is \n");
+		for (var = 0; var < 12; ++var) {
+			os_printf("0x%X  ", &setTimeDataIn->taskBox[0].OnOff+var);
+		}
+
+				os_memcpy(&localtaskInfo.cdtaskBox[setTimeDataIn->taskBox[0].Time_Task],&setTimeDataIn->taskBox[0].OnOff,sizeof(uint8_t)*7);
+				break;
+
+
+				localtaskInfo.cdCount++;
+		break;
+	case 0x06:
+		if(localtaskInfo.timertaskBox[setTimeDataIn->taskBox[0].Time_Task].Time_Task!=0xff)
+		{
+			os_memset((uint8_t*)&localtaskInfo.cdtaskBox[setTimeDataIn->taskBox[0].Time_Task],0xFF,sizeof(uint8_t)*7);
+			os_printf("Delete CountDown Task,TaskBuf is %X \n",&setTimeDataIn->taskBox[0].Time_Task);
+			localtaskInfo.cdCount--;
+		}
+		break;
+
+	default:
+		os_printf("setTimeData Wrong");
+		break;
+
+	}
+    //system_param_save_with_protect(CONFIG_SECTOR,  (void *)&localtaskInfo, sizeof(taskInfo_t));
+}

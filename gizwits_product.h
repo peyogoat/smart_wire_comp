@@ -19,7 +19,16 @@
 #include "osapi.h"
 #include <stdint.h>
 #include "gizwits_protocol.h"
+#include "eagle_soc.h"
 
+#define CONFIG_SECTOR 0x3F9
+#define HIGH_LEVEL 1
+#define LOW_LEVEL 0
+#define SOCKET_1 4
+#define SOCKET_2
+#define SOCKET_3
+#define SOCKET_4
+#define USB
 /**
 * MCU硬件版本号
 */
@@ -43,10 +52,64 @@
 
 #define SIG_UPGRADE_DATA 0x01
 
+
+
+//#pragma pack(1)
+//typedef struct
+//{
+//	uint8_t OnOff;
+//	uint8_t Task_status;
+//	uint8_t Week_Repeat;
+//	uint8_t Time_Task;
+//	uint16_t Time_Minute;
+//	uint8_t Time_Second;
+//} taskBox_t;
+
+//#pragma pack(1)
+//typedef struct
+//{
+//	uint8_t OnOff;
+//	uint8_t Task_status;
+//	uint8_t Week_Repeat;
+//	uint8_t Time_Task;
+//	uint16_t Time_Minute;
+//	uint8_t Time_Second;
+//	uint16_t Minute_Left;
+//	uint8_t Second_Left;
+//} local_cdtaskBox_t;
+
+#pragma pack(1)
+typedef struct
+{
+	taskBox_t taskBox[45];
+} control_task_t;
+
+#pragma pack(1)
+typedef struct
+{
+	uint8_t tmCount;
+	uint8_t cdCount;
+	devStatus_t devStatus;
+} system_info_t;
+
+
+#pragma pack()
 /**@name Gizwits 用户API接口
 * @{
 */
 int8_t gizwitsEventProcess(eventInfo_t *info, uint8_t *data, uint32_t len);
 /**@} */
+//extern devStatus_t localDevStatus;
+extern uint8_t ConServer;
+extern dataPoint_t currentDataPoint;
+void read_lastdata(void);
+void setTimehandle(dataPoint_t* setTimerBuf);
+//void ICACHE_FLASH_ATTR do_socketOnoff(uint8_t socket_num,uint8_t On_or_Off);
+void ICACHE_FLASH_ATTR taskTimerTick(void);
+void  CountXinqi(void);
+uint16_t ICACHE_FLASH_ATTR CountDownTask(uint16_t CDT_position,uint8_t* p_CDT_TaskNum);
+void ICACHE_FLASH_ATTR DoCDTask(uint8_t Num);
+uint8_t ICACHE_FLASH_ATTR RealTimeTask(uint16_t RTT_position,uint8_t* p_RTT_TaskNum);
+void ICACHE_FLASH_ATTR DoTimerTask(uint8_t Num);
 
 #endif
