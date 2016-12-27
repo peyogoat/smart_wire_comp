@@ -20,7 +20,7 @@
 
 #include "user_devicefind.h"
 #include "user_webserver.h"
-#include "gagent_external.h"
+
 #include "gizwits_product.h"
 #include "gizwits_protocol.h"
 #include "driver/hal_key.h"
@@ -49,8 +49,11 @@ _tm Systime;
 uint8_t var;
 uint8_t CurXinqi=0;
 static uint8_t SocketPin[5]={SOCKET_1,SOCKET_1,SOCKET_1,SOCKET_1,SOCKET_1};
-uint8_t AllOnoff = 0xEF;
-
+uint8_t AllOnoff = 0x00;
+bool isdosecondTTask=0;
+bool isdosecondCDTask=0;
+uint8_t secondTTaskNum=0;
+uint8_t secondCDTaskNum=0;
 /**@name Gagent模块相关系统任务参数
 * @{
 */
@@ -98,7 +101,9 @@ LOCAL keys_typedef_t keys;                                                  ///<
 */
 LOCAL void ICACHE_FLASH_ATTR key1ShortPress(void)
 {
-    os_printf("#### key1 short press \n");
+    os_printf("#### key1 short press, default setup\n");
+//    gizMSleep();
+//    gizwitsSetMode(WIFI_RESET_MODE);
 }
 
 /**
@@ -108,9 +113,18 @@ LOCAL void ICACHE_FLASH_ATTR key1ShortPress(void)
 */
 LOCAL void ICACHE_FLASH_ATTR key1LongPress(void)
 {
-    os_printf("#### key1 long press, default setup\n");
-    gizMSleep();
-    gizwitsSetMode(WIFI_RESET_MODE);
+	uint8_t rusult;
+	system_info_t info;
+    os_printf("#### key1 long press, clean data\n");
+//    rusult = spi_flash_erase_sector(CONFIG_SECTOR);
+//    if(rusult == SPI_FLASH_RESULT_OK){
+//    	os_printf("clean data ok\n");
+//    }
+//    else
+//    	os_printf("clean data failed:%d",rusult);
+    os_memset(&info , 0 ,sizeof(info));
+    info.devStatus.wBitBuf[0] = 0x01;
+	system_param_save_with_protect(CONFIG_SECTOR,  (void *)&info, sizeof(system_info_t));
 }
 
 /**
@@ -122,7 +136,7 @@ LOCAL void ICACHE_FLASH_ATTR key2ShortPress(void)
 {
     os_printf("#### key2 short press, ON OFF \n");
 
-    do_socketOnoff(0x1f,AllOnoff);
+    do_socketOnoff(0x3f,AllOnoff);
     AllOnoff = ~AllOnoff;
 }
 
@@ -178,10 +192,10 @@ LOCAL void ICACHE_FLASH_ATTR keyInit(void)
 LOCAL void ICACHE_FLASH_ATTR switchInit(void)
 {
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO4_U, FUNC_GPIO4);
-	if(currentDataPoint.valueOnOff!=0x1f)
-		AllOnoff = 0x10;
-	//do_socketOnoff(currentDataPoint.valueOnOff,0x10);
-	//do_socketOnoff((~currentDataPoint.valueOnOff)&0x1F,0x00);
+	if(currentDataPoint.valueOnOff!=0x3f)
+		AllOnoff = 0xFF;
+	do_socketOnoff(currentDataPoint.valueOnOff,0x20);
+	do_socketOnoff((~currentDataPoint.valueOnOff)&0x3F,0x00);
 }
 /**
 * 用户数据获取
@@ -224,6 +238,9 @@ void ICACHE_FLASH_ATTR gizwitsUserTask(os_event_t * events)
     case SIG_UPGRADE_DATA:
         gizwitsHandle((dataPoint_t *)&currentDataPoint);
         break;
+    case SIG_SAVE_DATA:
+    	saveDeviceData();
+			break;
     default:
         os_printf("---error sig! ---\n");
         break;
@@ -316,25 +333,38 @@ void user_init(void)
 void read_lastdata(void)
 {
 	system_info_t info;
-    os_memset(&info,0,sizeof(info));
+    os_memset(&info,0,sizeof(system_info_t));
+    os_memset(&currentDataPoint,0,sizeof(dataPoint_t));
+    os_memset(&localtaskInfo,0,sizeof(taskInfo_t));
 	system_param_load(CONFIG_SECTOR, 0, (void *)&info, sizeof(system_info_t));
-	os_memcpy((uint8_t *)&currentDataPoint, (uint8_t *)&info.devStatus, sizeof(devStatus_t));
-	os_memcpy((uint8_t *)&localtaskInfo.timertaskBox, (uint8_t *)&info.devStatus.valueTimer, sizeof(uint8_t)*375);
-	os_memcpy((uint8_t *)&localtaskInfo, (uint8_t *)&info, sizeof(uint8_t)*2);
+	os_memcpy((uint8_t *)&currentDataPoint.valueOnOff, (uint8_t *)&info.devStatus.wBitBuf, 1);
+	os_memcpy((uint8_t *)&currentDataPoint.valueSystime, (uint8_t *)&info.devStatus.valueSystime, 4);
+	os_memcpy((uint8_t *)&localtaskInfo.timertaskBox, (uint8_t *)&info.devStatus.valueTimer, sizeof(uint8_t)*TIMER_SIZE);
+	os_memcpy((uint8_t *)&localtaskInfo, (uint8_t *)&info.tmCount, sizeof(uint8_t)*2);
+	do_Task();
 }
 
 void ICACHE_FLASH_ATTR taskTimerTick(void)
 {
+	uint16_t reporttask_p=0;
+	static uint32 free_heap;
 	system_os_post(USER_TASK_PRIO_0, SIG_UPGRADE_DATA, 0);
     Systime.ntp++;
     Systime.second++;
+
+
 //    if(!(Systime.second%10))
 //    os_printf("taskTimerTick! Second is:%d\n",Systime.second);
     if (Systime.second == 60)
     {
+    	free_heap = system_get_free_heap_size();
+    	os_printf("free_heap is :%d!!!\n",free_heap);
+    	//system_print_meminfo();
         Systime.second = 0;
         Systime.minute++;
-        currentDataPoint.valueSystime++;
+        gizwitsProtocol.gizCurrentDataPoint.valueSystime++;
+        currentDataPoint.valueSystime =
+        		gizwitsProtocol.gizCurrentDataPoint.valueSystime;
         if (Systime.minute == 60)
         {
             Systime.minute = 0;
@@ -347,19 +377,27 @@ void ICACHE_FLASH_ATTR taskTimerTick(void)
                 CountXinqi();
                 }
                 CurXinqi++;
+                if(CurXinqi==7)
+                	CurXinqi=1;
+                Systime.day++;
             }
         }
-
-     system_os_post(USER_TASK_PRIO_2, SIG_DO_TASK, 0);
+        reporttask_p = do_Task();
+   //  system_os_post(USER_TASK_PRIO_2, SIG_DO_TASK, 0);
     }
-//    system_os_post(USER_TASK_PRIO_2, SIG_DO_TASK, 0);
+    Do_secondTask(reporttask_p);
+
 }
 
 void CountXinqi(void)
 {
+	static bool bootfirst=1;
 	uint16_t Midmonth,MidYear;
 	uint8_t century =20;
-
+	if(bootfirst){
+		gagentGetNTP(&Systime);
+		bootfirst=0;
+	}
 	Midmonth = Systime.month;
 	MidYear = Systime.year;
    if(Midmonth==1)
@@ -379,12 +417,15 @@ void CountXinqi(void)
         CurXinqi+=7;//CurXinqi是几就是星期几
     }
     os_printf("CountXinqi Hour:%d , Minute:%d , CurXInqi:%d\n",Systime.hour,Systime.minute,CurXinqi);
-    currentDataPoint.valueSystime=Systime.hour*60+Systime.minute;
+    gizwitsProtocol.gizCurrentDataPoint.valueSystime =
+    		Systime.hour*60+Systime.minute;
+    currentDataPoint.valueSystime =
+    		gizwitsProtocol.gizCurrentDataPoint.valueSystime;
     os_printf("CountXinqi Curtime is:%d\n",currentDataPoint.valueSystime);
 }
 
 
-void ICACHE_FLASH_ATTR do_Task(void)
+uint16_t ICACHE_FLASH_ATTR do_Task(void)
 {
 	uint8_t DoSocket = 1;
 	uint16_t DT_position=0;
@@ -393,24 +434,29 @@ void ICACHE_FLASH_ATTR do_Task(void)
 	uint8_t *p_DT_TaskNum=&DT_TaskNum[0];
 	os_printf("do_task test!\n");
 	os_memset(&currentDataPoint.valueTimer[0], 0, sizeof(currentDataPoint.valueTimer));
-	os_printf("do_task test!\n");
 	DT_position=CountDownTask(0,p_DT_TaskNum);
 	os_printf("test 2\n");
 	DT_position=RealTimeTask(DT_position,p_DT_TaskNum);
 	os_printf("test 2\n");
-	for(DoSocket = 1; DoSocket<6 ;DoSocket++){
-		if(DT_TaskNum[DoSocket]!=0xff){
-			if(DT_TaskNum[DoSocket]&0x80)
-				DoCDTask(p_DT_TaskNum[DoSocket]);
-			else
-				DoTimerTask(p_DT_TaskNum[DoSocket]);
-		}
-	}
-	if(DT_TaskNum[0]!=0xff)
-	{
-	    system_param_save_with_protect(CONFIG_SECTOR,  (void *)&localtaskInfo, sizeof(taskInfo_t));
-	}
-
+//	for(DoSocket = 1; DoSocket<6 ;DoSocket++){
+//		if(DT_TaskNum[DoSocket]!=0xff){
+//			if(DT_TaskNum[DoSocket]&0x80)
+//				{
+//				DoCDTask(p_DT_TaskNum[DoSocket]);
+//				os_printf("Do CD Task last Data:0x%X",DT_TaskNum[DoSocket]);
+//				}
+//			else
+//				{
+//				DoTimerTask(p_DT_TaskNum[DoSocket]);
+//				os_printf("Do Tier Task last Data:0x%X",DT_TaskNum[DoSocket]);
+//				}
+//		}
+//	}
+//	if(DT_TaskNum[0]!=0xff)
+//	{
+//		saveDeviceData();
+//	}
+	return DT_position;
 }
 /**
  * peyo
@@ -422,33 +468,41 @@ uint16_t ICACHE_FLASH_ATTR CountDownTask(uint16_t CDT_position,uint8_t* p_CDT_Ta
 	uint8_t CountDownTaskvar;
 	uint8_t* CountDownTaskpoint;
 	uint8_t find_socket = 0;
-	for(var=0;var<20;var++)
+	uint16_t CDT_p = CDT_position;
+	for(var=0;var<CDTASK_COUNT;var++)
 	{
-			if((localtaskInfo.cdtaskBox[var].Time_Task!=0)&&(localtaskInfo.cdtaskBox[var].Time_Task!=0xFF)&&(localtaskInfo.cdtaskBox[var].Task_status&0x10))
+			if(localtaskInfo.cdtaskBox[var].Task_status&0x10)
 			{
 				CountDownTaskpoint=(uint8_t*)&localtaskInfo.cdtaskBox[var];
-				os_printf("CountDownTask cdtaskBox[%d]is:\n",var);
+				os_printf("Do CountDownTask cdtaskBox[%d]is:\n",var);
 				for(CountDownTaskvar=0;CountDownTaskvar<7;CountDownTaskvar++)
 				{
 					os_printf("0x%x\n",*CountDownTaskpoint);
 					CountDownTaskpoint++;
 				}
-				if(localtaskInfo.cdtaskBox[var].Time_Minute)
+				if((localtaskInfo.cdtaskBox[var].Minute_Left)||(localtaskInfo.cdtaskBox[var].Second_Left))
 				{
-					*p_CDT_TaskNum=0;
-					localtaskInfo.cdtaskBox[var].Time_Minute = gizProtocolExchangeBytes(gizProtocolExchangeBytes(localtaskInfo.cdtaskBox[var].Time_Minute)-1);
-					os_memcpy((uint8_t*)&reportData->valueTimer[CDT_position],&localtaskInfo.cdtaskBox[var],sizeof(uint8_t)*10);
-					CDT_position=+10;
-
-					os_printf("CountDownTask,copy done!\nTime_Minute is:%d\n",gizProtocolExchangeBytes(localtaskInfo.cdtaskBox[var].Time_Minute));
-					if(!localtaskInfo.cdtaskBox[var].Time_Minute)
+					//*p_CDT_TaskNum=0;
+					if(localtaskInfo.cdtaskBox[var].Minute_Left)
+						localtaskInfo.cdtaskBox[var].Minute_Left = gizProtocolExchangeBytes(gizProtocolExchangeBytes(localtaskInfo.cdtaskBox[var].Minute_Left)-1);
+					os_printf("There is a CD task here!\nTask No is :%d \n",localtaskInfo.cdtaskBox[var].Time_Task);
+					if(localtaskInfo.cdtaskBox[var].Minute_Left!=0){
+						os_memcpy((uint8_t*)&reportData->valueTimer[CDT_position],&localtaskInfo.cdtaskBox[var],sizeof(local_cdtaskBox_t));
+						CDT_position=+10;
+					}
+					os_printf("CountDownTask,copy done!\nTime_Minute is:%d\nTime_Minute_Left is :%d",gizProtocolExchangeBytes(localtaskInfo.cdtaskBox[var].Time_Minute),
+							localtaskInfo.cdtaskBox[var].Minute_Left);
+					if(!localtaskInfo.cdtaskBox[var].Minute_Left)
 					{
+						localtaskInfo.cdtaskBox[var].Second_Left++;
+						secondCDTaskNum++;
 						os_printf("CountDownTask DO task!\n");
-						DoCDTask(var);
-						for(find_socket=0;find_socket<5;find_socket++){
-							if(localtaskInfo.cdtaskBox[var].OnOff>>find_socket)
-								p_CDT_TaskNum[find_socket+1]=var|0x80;
-						}
+//						for(find_socket=0;find_socket<5;find_socket++){
+//							if(localtaskInfo.cdtaskBox[var].OnOff>>find_socket)//标识为CD task
+//								p_CDT_TaskNum[find_socket+1]=var|0x80;
+//						}
+//						localtaskInfo.cdtaskBox[var].Task_status &= 0xEF;
+
 					}
 					else
 					{
@@ -465,6 +519,7 @@ uint16_t ICACHE_FLASH_ATTR CountDownTask(uint16_t CDT_position,uint8_t* p_CDT_Ta
 
 void ICACHE_FLASH_ATTR DoCDTask(uint8_t Num)
 {
+	Num&=0x7F;
 	do_socketOnoff(localtaskInfo.cdtaskBox[Num].OnOff
 			,localtaskInfo.cdtaskBox[Num].Task_status);
 	os_printf("DoCDTask\n");
@@ -479,7 +534,7 @@ uint8_t ICACHE_FLASH_ATTR RealTimeTask(uint16_t RTT_position,uint8_t* p_RTT_Task
 	uint8_t RTT_DotaskNum=0xff;
 	dataPoint_t* reportData = (dataPoint_t*) &currentDataPoint ;
 	uint16_t realtimetaskminute;
-	for(var=0;var<25;var++)
+	for(var=0;var<TTASK_COUNT;var++)
 	{
 		if((localtaskInfo.timertaskBox[var].Task_status&0x08)&&(localtaskInfo.timertaskBox[var].Task_status!=0xFF))
 		{
@@ -488,28 +543,30 @@ uint8_t ICACHE_FLASH_ATTR RealTimeTask(uint16_t RTT_position,uint8_t* p_RTT_Task
 				os_printf("There is Timer tasks today!,taskNois:%d\n",localtaskInfo.timertaskBox[var].Time_Task);
 				os_printf("Task_status:0x%x\nTime_minute:0x%x\n",localtaskInfo.timertaskBox[var].Task_status,(uint16_t)localtaskInfo.timertaskBox[var].Time_Minute);
 				os_memcpy((uint8_t*)&realtimetaskminute,(uint8_t*)&localtaskInfo.timertaskBox[var].Time_Minute,sizeof(uint8_t)*2);
-				realtimetaskminute=gizProtocolExchangeBytes(realtimetaskminute);
 				//				realtimetaskminute=Y2X(CURTIME_RATIO,CURTIME_ADDITION,realtimetaskminute);
 				if(realtimetaskminute||localtaskInfo.timertaskBox[var].Time_Second)
 				{
-					os_printf("TaskTimeMinute is 0x%x \nSystimeMinute is %d\n",realtimetaskminute,currentDataPoint.valueSystime);//,*((uint8_t*)&Systime.minute+1)
+					realtimetaskminute=gizProtocolExchangeBytes(realtimetaskminute);
+					os_printf("TaskTimeMinute is 0x%x \nSystimeMinute is 0x%x ;%d\n",realtimetaskminute,gizwitsProtocol.gizCurrentDataPoint.valueSystime,gizwitsProtocol.gizCurrentDataPoint.valueSystime);//,*((uint8_t*)&Systime.minute+1)
 					if(realtimetaskminute == gizwitsProtocol.gizCurrentDataPoint.valueSystime)
 					{
 						os_printf("TimerTask Time's out No is:%d\n",localtaskInfo.timertaskBox[var].Time_Task);
-						DoTimerTask(var);
-						for(find_socket=0;find_socket<5;find_socket++){
-							if(localtaskInfo.timertaskBox[var].OnOff>>find_socket)
-								p_RTT_TaskNum[find_socket+1]=var;
-						}
+						secondTTaskNum++;
+//						for(find_socket=0;find_socket<5;find_socket++){
+//							if(localtaskInfo.timertaskBox[var].OnOff>>find_socket)
+//								p_RTT_TaskNum[find_socket+1]=var;
+//						}
+//
+//						os_memcpy(&reportData->valueTimer[RTT_position],&localtaskInfo.timertaskBox[var],sizeof(uint8_t)*7);
+//						RTT_position=+7;
+//						if(localtaskInfo.timertaskBox[var].Week_Repeat==0x00)
+//						{
+//							localtaskInfo.timertaskBox[var].Task_status &= 0xF7;
+//							*p_RTT_TaskNum = 0;
+////						    system_param_save_with_protect(CONFIG_TASK,  (void *)&localtaskInfo, sizeof(localtaskInfo_t));/old
+//						}
 
-						os_memcpy(&reportData->valueTimer[RTT_position],&localtaskInfo.timertaskBox[var],sizeof(uint8_t)*7);
-						RTT_position=+7;
-						if(localtaskInfo.timertaskBox[var].Week_Repeat==0x00)
-						{
-							localtaskInfo.timertaskBox[var].Task_status &= 0xF7;
-							*p_RTT_TaskNum = 0;
-//						    system_param_save_with_protect(CONFIG_TASK,  (void *)&localtaskInfo, sizeof(localtaskInfo_t));/old
-						}
+						break;
 					}
 				}
 			}
@@ -524,8 +581,8 @@ void ICACHE_FLASH_ATTR DoTimerTask(uint8_t Num)
 {
 	os_printf("DoTimerTask set switch!Numis %d \n"
 			,localtaskInfo.timertaskBox[Num].Time_Task);
-	os_printf("Minute:%d,Second:%d,Status:%d\n"
-			,localtaskInfo.timertaskBox[Num].Time_Minute
+	os_printf("Minute:%d,Second:%d,Status:0x%X\n"
+			,gizProtocolExchangeBytes(localtaskInfo.timertaskBox[Num].Time_Minute)
 			,localtaskInfo.timertaskBox[Num].Time_Second
 			,localtaskInfo.timertaskBox[Num].Task_status);
 	do_socketOnoff(localtaskInfo.timertaskBox[Num].OnOff
@@ -535,12 +592,137 @@ void ICACHE_FLASH_ATTR DoTimerTask(uint8_t Num)
 void ICACHE_FLASH_ATTR do_socketOnoff(uint8_t socket_num,uint8_t On_or_Off){
 	uint8_t find_dosocket = 0;
 	for(find_dosocket = 0; find_dosocket<5 ;find_dosocket++){
-		if(socket_num>>find_dosocket&0x01){
-			if(On_or_Off&0x10)
+		if((socket_num>>find_dosocket)&0x01){
+			if(On_or_Off&0x20){
 				GPIO_OUTPUT_SET(SocketPin[find_dosocket], 0);
-			else
+				currentDataPoint.valueOnOff |= (0x01<<find_dosocket);
+			}
+			else{
 				GPIO_OUTPUT_SET(SocketPin[find_dosocket], 1);
+				currentDataPoint.valueOnOff &= (~(0x01<<find_dosocket));
+			}
+			os_printf("do_socketOnoff!\nsocket_num:0x%X  On_or_Off:0x%X\n",
+					socket_num,On_or_Off);
 		}
+
+
+	}
+	if(currentDataPoint.valueOnOff==0x1f)
+	{
+		currentDataPoint.valueOnOff = 0x3f;
+		AllOnoff = 0x00;
+	}
+	else
+	{
+		AllOnoff = 0xff;
 	}
 }
 
+void saveDeviceData(void){
+	system_info_t info;
+	os_printf("saveDeviceData\n");
+	os_memset(&info,0,sizeof(system_info_t));
+	os_memcpy(&info.tmCount,&localtaskInfo.tmCount,2);
+	os_memcpy(&info.devStatus.wBitBuf,&currentDataPoint.valueOnOff,1);
+	os_memcpy(&info.devStatus.valueTimer,&localtaskInfo.timertaskBox,TIMER_SIZE);
+	os_memcpy(&info.devStatus.valueSystime,&currentDataPoint.valueSystime,4);
+	os_printf("saveDeviceData last\n");
+	system_param_save_with_protect(CONFIG_SECTOR,  (void *)&info, sizeof(system_info_t));
+}
+
+
+void ICACHE_FLASH_ATTR Do_secondTask(uint16_t reportsecondTask_p)
+{
+    uint8_t tmp_task_count;
+    uint8_t tmp_socket_count;
+	uint8_t DsT_TaskNum[6]={0xff,0xff,0xff,0xff,0xff,0xff};
+	dataPoint_t* reportData = (dataPoint_t*) &currentDataPoint;
+	uint16 taskTimerReport_p=reportsecondTask_p;
+	if(secondTTaskNum||secondCDTaskNum)
+		os_memset(&reportData->valueTimer[0],0,TIMER_SIZE);
+	if(secondTTaskNum){
+		os_printf("it is Do_secondTTask\n");
+		os_printf("Task Minute:%d\nSystime Minute:%d\ntask status is:0x%X\ntask Second :%d \nSys Second:%d \n",
+				gizProtocolExchangeBytes(localtaskInfo.timertaskBox[tmp_task_count].Time_Minute),
+				currentDataPoint.valueSystime,
+				localtaskInfo.timertaskBox[tmp_task_count].Task_status,
+				localtaskInfo.timertaskBox[tmp_task_count].Time_Second,
+				Systime.second);
+		for(tmp_task_count=0;tmp_task_count<TTASK_COUNT;tmp_task_count++){
+			if((localtaskInfo.timertaskBox[tmp_task_count].Time_Second==Systime.second)
+					&&(gizProtocolExchangeBytes(localtaskInfo.timertaskBox[tmp_task_count].Time_Minute)==currentDataPoint.valueSystime)
+					&&(localtaskInfo.timertaskBox[tmp_task_count].Task_status|0x80)){
+				os_printf("Do_secondTask DO Timer task!\n task Time:%d\nSystime:%d\n",localtaskInfo.timertaskBox[tmp_task_count].Time_Minute,currentDataPoint.valueSystime);
+				os_memcpy(&reportData->valueTimer[taskTimerReport_p],&localtaskInfo.timertaskBox[tmp_task_count],sizeof(uint8_t)*7);
+				taskTimerReport_p=+7;
+				isdosecondCDTask=1;
+				secondTTaskNum--;
+				for(tmp_socket_count=0;tmp_socket_count<5;tmp_socket_count++){
+					if(localtaskInfo.timertaskBox[tmp_task_count].OnOff>>tmp_socket_count)//标识为Timer task
+						DsT_TaskNum[tmp_socket_count+1]=tmp_task_count;
+				}
+				if(localtaskInfo.timertaskBox[tmp_task_count].Week_Repeat==0x00)
+				{
+					localtaskInfo.timertaskBox[tmp_task_count].Task_status &= 0xF7;
+					DsT_TaskNum[0] = 0;
+				}
+
+			}
+		}
+	}
+
+	if(secondCDTaskNum){
+		for(tmp_task_count=0;tmp_task_count<CDTASK_COUNT;tmp_task_count++){
+			if((localtaskInfo.cdtaskBox[tmp_task_count].Minute_Left==0)&&(localtaskInfo.cdtaskBox[tmp_task_count].Task_status&0x10)){
+				os_printf("plus the seconds\n,task_status is 0x%X\ntmp_task_count is %d\nsecondCDTaskNum is %d\n"
+						,localtaskInfo.cdtaskBox[tmp_task_count].Task_status,tmp_task_count,secondCDTaskNum);
+				if(localtaskInfo.cdtaskBox[tmp_task_count].Second_Left)
+					localtaskInfo.cdtaskBox[tmp_task_count].Second_Left--;
+				os_printf("the seconds is %d now\n",
+						localtaskInfo.cdtaskBox[tmp_task_count].Second_Left);
+				if(!localtaskInfo.cdtaskBox[tmp_task_count].Second_Left){
+					os_printf("Do_secondTask DO CD task!\nSecondLeft is:%d\n",localtaskInfo.cdtaskBox[tmp_task_count].Second_Left);
+//					localtaskInfo.cdtaskBox[tmp_task_count].Minute_Left = gizProtocolExchangeBytes(gizProtocolExchangeBytes(localtaskInfo.cdtaskBox[tmp_task_count].Minute_Left)-1);
+					os_printf("There is a CD task here!\nTask No is :%d \n",localtaskInfo.cdtaskBox[tmp_task_count].Time_Task);
+					os_memcpy((uint8_t*)&reportData->valueTimer[taskTimerReport_p],&localtaskInfo.cdtaskBox[tmp_task_count],sizeof(local_cdtaskBox_t));
+					taskTimerReport_p=+10;
+					isdosecondCDTask=1;
+					if(secondCDTaskNum)
+						secondCDTaskNum--;
+					for(tmp_socket_count=0;tmp_socket_count<5;tmp_socket_count++){
+						if(localtaskInfo.cdtaskBox[tmp_task_count].OnOff>>tmp_socket_count)//标识为CD task
+							DsT_TaskNum[tmp_socket_count+1]=tmp_task_count|0x80;
+					}
+					localtaskInfo.cdtaskBox[tmp_task_count].Task_status &= 0xEF;
+					DsT_TaskNum[0]=0;
+				}
+			}
+		}
+	}
+
+	if(isdosecondTTask||isdosecondCDTask){
+		for(tmp_socket_count = 1; tmp_socket_count<6 ;tmp_socket_count++){
+			if(DsT_TaskNum[tmp_socket_count]!=0xff){
+				if(DsT_TaskNum[tmp_socket_count]&0x80)
+					{
+					DoCDTask(DsT_TaskNum[tmp_socket_count]);
+					os_printf("Do CD Task last Data:0x%X",DsT_TaskNum[tmp_socket_count]);
+					}
+				else
+					{
+					DoTimerTask(DsT_TaskNum[tmp_socket_count]);
+					os_printf("Do Tier Task last Data:0x%X",DsT_TaskNum[tmp_socket_count]);
+					}
+			}
+			isdosecondCDTask=0;
+			isdosecondTTask=0;
+		}
+
+	}
+	if(DsT_TaskNum[0]!=0xff)
+	{
+		saveDeviceData();
+	}
+
+
+}

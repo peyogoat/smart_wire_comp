@@ -25,7 +25,7 @@ gizwitsProtocol_t gizwitsProtocol;
 #define gizwitsTaskQueueLen    200                              ///< gizwits协议消息队列
 LOCAL os_event_t gizwitsTaskQueue[gizwitsTaskQueueLen];         ///< gizwits协议消息队列长度
 
-/** 定时器相关参数 */ 
+/** 定时器相关参数 */
 LOCAL os_timer_t gizTimer; 
 
 /**
@@ -103,7 +103,7 @@ uint32 ICACHE_FLASH_ATTR gizGetIntervalsMs(uint32 lastRpMs)
 *
 * @return  tmp_value: 转换后的数据
 */
- uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
+ uint16_t  ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
 {
     uint16_t    tmp_value;
     uint8_t     *index_1, *index_2;
@@ -140,7 +140,7 @@ static uint32_t ICACHE_FLASH_ATTR gizExchangeWord(uint32_t  value)
 * @param [in] *buf     : buf地址
 * @param [in] dataLen  : 字节长度
 *
-* @return 正确 : 0 
+* @return 正确 : 0
           失败 : -1
 */
 static int8_t ICACHE_FLASH_ATTR gizByteOrderExchange(uint8_t *buf,uint32_t dataLen)
@@ -247,9 +247,9 @@ static float ICACHE_FLASH_ATTR gizX2YFloat(float ratio, float addition, uint32_t
 * @brief 数据点跨字节判断
 *
 * @param [in] bitOffset     : 位偏移
-* @param [in] bitLen        : 占用位长度 
+* @param [in] bitLen        : 占用位长度
 *
-* @return 未跨字节 : 0 
+* @return 未跨字节 : 0
             跨字节 : 1
 */
 static uint8_t ICACHE_FLASH_ATTR gizAcrossByteJudge(uint32_t bitOffset,uint32_t bitLen)
@@ -357,7 +357,7 @@ static int32_t ICACHE_FLASH_ATTR gizCompressValue(uint32_t byteOffset,uint32_t b
     }
     else if(1 == ret)
     {
-        /* 暂时支持最多跨两字节的压缩 */ 
+        /* 暂时支持最多跨两字节的压缩 */
         highBit = ((uint8_t)srcData)>>(8-bitOffset%8);
         lowBit = (uint8_t)srcData & (0xFF >> (8-bitOffset%8));
         bufAddr[byteOffset + 1] |=  highBit;
@@ -683,13 +683,17 @@ int32_t ICACHE_FLASH_ATTR gizIssuedProcess(uint8_t *inData, uint32_t inLen,uint8
             break;
             
         case ACTION_READ_DEV_STATUS:
-
-            gizDataPoints2ReportData(&gizwitsProtocol.gizLastDataPoint,&gizwitsProtocol.reportData.devStatus);
-            gizwitsProtocol.reportData.action = ACTION_READ_DEV_STATUS_ACK;
-            gizwitsProtocol.reportData.devStatus.valueTimer[0] = localtaskInfo.cdCount+localtaskInfo.tmCount;
-            os_memcpy((uint8_t *)(&gizwitsProtocol.reportData.devStatus.valueTimer)+1, (uint8_t *)&localtaskInfo.timertaskBox, 375);
-            os_memcpy(outData, (uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
-            *outLen = sizeof(gizwitsReport_t);
+        	gizDataPoints2ReportData(&gizwitsProtocol.gizLastDataPoint,&gizwitsProtocol.reportData.devStatus);
+        	gizwitsProtocol.reportData.action = ACTION_READ_DEV_STATUS_ACK;
+        	gizwitsProtocol.reportData.devStatus.valueTimer[0] = localtaskInfo.cdCount+localtaskInfo.tmCount;
+        	os_printf("ACTION_READ_DEV_STATUS report!!!! TaskSum:%d\n",gizwitsProtocol.reportData.devStatus.valueTimer[0]);
+        	os_memcpy((uint8_t *)(&gizwitsProtocol.reportData.devStatus.valueTimer)+1, (uint8_t *)&localtaskInfo.timertaskBox, TIMER_SIZE-1);
+//        	os_memcpy(&gizwitsProtocol.reportData.devStatus.valueSystime,&currentDataPoint.valueSystime,4);
+//        	os_memcpy(&gizwitsProtocol.reportData.devStatus.wBitBuf,&currentDataPoint.valueOnOff,1);
+//        	os_memcpy(&currentDataPoint,&gizwitsProtocol.reportData.devStatus,sizeof(dataPoint_t));
+//        	os_memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, &gizwitsProtocol.reportData.devStatus, sizeof(gizwitsReport_t));
+        	os_memcpy(outData, (uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
+        	*outLen = sizeof(gizwitsReport_t);
             break;
             
         case ACTION_W2D_TRANSPARENT_DATA: //透传
@@ -785,7 +789,7 @@ void ICACHE_FLASH_ATTR gizTask(os_event_t * events)
         gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
         break;
 	case SIG_DO_TASK:
-		do_Task();
+//		do_Task();
 		break;
     default:
         os_printf("---error sig! ---\n");
@@ -863,14 +867,16 @@ int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
     }
 
     //Regularly report conditional
-    if((1 == gizCheckReport(dataPoint, (dataPoint_t *)&gizwitsProtocol.gizLastDataPoint)))
-    {
-        gizDataPoints2ReportData(dataPoint, &gizwitsProtocol.reportData.devStatus);
+    if(ConServer){
+    	if((1 == gizCheckReport(dataPoint, (dataPoint_t *)&gizwitsProtocol.gizLastDataPoint)))
+		{
+			gizDataPoints2ReportData(dataPoint, &gizwitsProtocol.reportData.devStatus);
 
-        gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
-        gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
-
-        memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, (uint8_t *)dataPoint, sizeof(dataPoint_t));
+			gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
+			gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
+			os_printf("Data Point Changed and report!!!!\n");
+			memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, (uint8_t *)dataPoint, sizeof(dataPoint_t));
+		}
     }
 }
 

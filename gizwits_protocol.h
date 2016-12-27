@@ -19,7 +19,7 @@
 #include "osapi.h"
 #include "user_interface.h"
 #include "user_webserver.h"
-
+#include "gagent_external.h"
 
 /**
 * @name 协议版本号
@@ -62,6 +62,11 @@
 #define SIG_DO_TASK								0xff
 ///< 协议立即上报任务
 /**@} */
+
+
+#define TIMER_SIZE 376  //375
+#define CDTASK_COUNT 20 //20
+#define TTASK_COUNT 25  //25
 
 /** WiFi模组配置参数*/
 typedef enum
@@ -126,13 +131,13 @@ typedef enum
 /** 用户区设备状态结构体*/
 #pragma pack(1)
 typedef struct {
-  uint8_t valueOnOff;
-  uint8_t valueTimer[376];
-  uint32_t valueSystime;
-  uint32_t valueConsumption;
+  bool valueOnOff;
+  uint8_t valueTimer[TIMER_SIZE];
+  uint16_t valueSystime;
+  uint16_t valueConsumption;
 } dataPoint_t;
 
-/** 对应协议“4.10 WiFi模组控制设备”中的标志位"attr_flags" */ 
+/** 对应协议“4.10 WiFi模组控制设备”中的标志位"attr_flags" */
 typedef struct {
   uint8_t flagOnOff:1;
   uint8_t flagTimer:1;
@@ -141,7 +146,7 @@ typedef struct {
 /** 对应协议“4.10 WiFi模组控制设备”中的数据值"attr_vals" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
-  uint8_t valueTimer[376];
+  uint8_t valueTimer[TIMER_SIZE];
 } attrVals_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中“P0协议区”的标志位"attr_flags" + 数据值"attr_vals" */
@@ -153,12 +158,12 @@ typedef struct {
 /** 对应协议“4.9 设备MCU向WiFi模组主动上报当前状态”中的设备状态"dev_status" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
-  uint8_t valueTimer[376];
+  uint8_t valueTimer[TIMER_SIZE];
   uint16_t valueSystime;
   uint16_t valueConsumption;
 } devStatus_t;
 
-/** 对应协议“4.9 设备MCU向WiFi模组主动上报当前状态”中的 设备状态位"dev_status"  */ 
+/** 对应协议“4.9 设备MCU向WiFi模组主动上报当前状态”中的 设备状态位"dev_status"  */
 typedef struct
 {
     uint8_t action;
@@ -248,20 +253,23 @@ typedef struct
 {
 	uint8_t tmCount;
 	uint8_t cdCount;
-	taskBox_t timertaskBox[25];
-	local_cdtaskBox_t cdtaskBox[20];
+	taskBox_t timertaskBox[TTASK_COUNT];
+	local_cdtaskBox_t cdtaskBox[CDTASK_COUNT];
 } taskInfo_t;
-
+extern dataPoint_t currentDataPoint;
+extern uint8_t ConServer;
+extern _tm Systime;
 /**@name Gizwits 用户API接口
 * @{
 */
+#pragma pack()
 extern taskInfo_t localtaskInfo;
 extern gizwitsProtocol_t gizwitsProtocol;
 void gizwitsSetMode(uint8_t mode);
 void gizwitsInit(void);
 int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint);
 int32_t gizwitsPassthroughData(uint8_t * data, uint32_t len);
-extern  uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value);
+extern uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value);
 /**@} */
 
 #endif

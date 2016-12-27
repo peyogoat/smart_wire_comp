@@ -21,9 +21,9 @@
 #include "gizwits_protocol.h"
 #include "eagle_soc.h"
 
-#define CONFIG_SECTOR 0x3F9
-#define HIGH_LEVEL 1
-#define LOW_LEVEL 0
+#define CONFIG_SECTOR 0x3F6//3f9
+#define HIGH_LEVEL 0xff
+#define LOW_LEVEL 0x00
 #define SOCKET_1 4
 #define SOCKET_2
 #define SOCKET_3
@@ -51,6 +51,7 @@
 #endif
 
 #define SIG_UPGRADE_DATA 0x01
+#define SIG_SAVE_DATA  0x02
 
 
 
@@ -92,7 +93,10 @@ typedef struct
 	devStatus_t devStatus;
 } system_info_t;
 
-
+extern bool isneedsecondTTask;
+extern bool isneedsecondCDTask;
+extern uint8_t secondCDTaskNum;
+extern uint8_t secondTTaskNum;
 #pragma pack()
 /**@name Gizwits 用户API接口
 * @{
@@ -100,8 +104,6 @@ typedef struct
 int8_t gizwitsEventProcess(eventInfo_t *info, uint8_t *data, uint32_t len);
 /**@} */
 //extern devStatus_t localDevStatus;
-extern uint8_t ConServer;
-extern dataPoint_t currentDataPoint;
 void read_lastdata(void);
 void setTimehandle(dataPoint_t* setTimerBuf);
 //void ICACHE_FLASH_ATTR do_socketOnoff(uint8_t socket_num,uint8_t On_or_Off);
@@ -111,5 +113,9 @@ uint16_t ICACHE_FLASH_ATTR CountDownTask(uint16_t CDT_position,uint8_t* p_CDT_Ta
 void ICACHE_FLASH_ATTR DoCDTask(uint8_t Num);
 uint8_t ICACHE_FLASH_ATTR RealTimeTask(uint16_t RTT_position,uint8_t* p_RTT_TaskNum);
 void ICACHE_FLASH_ATTR DoTimerTask(uint8_t Num);
+extern void saveDeviceData(void);
+void ICACHE_FLASH_ATTR do_socketOnoff(uint8_t socket_num,uint8_t On_or_Off);
+void ICACHE_FLASH_ATTR Do_secondTask(uint16_t);
+uint16_t ICACHE_FLASH_ATTR do_Task(void);
 
 #endif
