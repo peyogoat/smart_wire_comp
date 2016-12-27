@@ -14,18 +14,25 @@
 *
 ***********************************************************/
 #include "gizwits_protocol.h"
-#include "gagent_external.h"
+#include "gagent_soc.h"
+#include "gizwits_product.h"
 #include "mem.h"
-
 
 /** 协议全局变量 **/
 gizwitsProtocol_t gizwitsProtocol;
+
+/**@name Gagent模块相关系统任务参数
+* @{
+*/
+#define TaskQueueLen    200                                                 ///< 消息队列总长度
+LOCAL  os_event_t   TaskQueue[TaskQueueLen];                                ///< 消息队列
+/**@} */
 
 /** 系统任务相关参数 */
 #define gizwitsTaskQueueLen    200                              ///< gizwits协议消息队列
 LOCAL os_event_t gizwitsTaskQueue[gizwitsTaskQueueLen];         ///< gizwits协议消息队列长度
 
-/** 定时器相关参数 */
+/** 定时器相关参数 */ 
 LOCAL os_timer_t gizTimer; 
 
 /**
@@ -65,16 +72,6 @@ uint32 ICACHE_FLASH_ATTR gizTimeMs(void)
 }
 
 /**
-* @brief 查询系统时间，单位：毫秒
-* @param none
-* @return 系统时间，单位：秒
-*/
-uint32 ICACHE_FLASH_ATTR gizTimeS(void)
-{
-    return (system_get_time() / 1000*1000); 
-}
-
-/**
 * @brief 获得与上次查询的间隔时间，单位：毫秒
 * @param[in] lastRpMs 传入上次查询的时间
 * @return 返回当前与上次查询之间的间隔时间，单位：毫秒
@@ -103,7 +100,7 @@ uint32 ICACHE_FLASH_ATTR gizGetIntervalsMs(uint32 lastRpMs)
 *
 * @return  tmp_value: 转换后的数据
 */
- uint16_t  ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
+static uint16_t ICACHE_FLASH_ATTR gizProtocolExchangeBytes(uint16_t value)
 {
     uint16_t    tmp_value;
     uint8_t     *index_1, *index_2;
@@ -140,7 +137,7 @@ static uint32_t ICACHE_FLASH_ATTR gizExchangeWord(uint32_t  value)
 * @param [in] *buf     : buf地址
 * @param [in] dataLen  : 字节长度
 *
-* @return 正确 : 0
+* @return 正确 : 0 
           失败 : -1
 */
 static int8_t ICACHE_FLASH_ATTR gizByteOrderExchange(uint8_t *buf,uint32_t dataLen)
@@ -247,9 +244,9 @@ static float ICACHE_FLASH_ATTR gizX2YFloat(float ratio, float addition, uint32_t
 * @brief 数据点跨字节判断
 *
 * @param [in] bitOffset     : 位偏移
-* @param [in] bitLen        : 占用位长度
+* @param [in] bitLen        : 占用位长度 
 *
-* @return 未跨字节 : 0
+* @return 未跨字节 : 0 
             跨字节 : 1
 */
 static uint8_t ICACHE_FLASH_ATTR gizAcrossByteJudge(uint32_t bitOffset,uint32_t bitLen)
@@ -357,7 +354,7 @@ static int32_t ICACHE_FLASH_ATTR gizCompressValue(uint32_t byteOffset,uint32_t b
     }
     else if(1 == ret)
     {
-        /* 暂时支持最多跨两字节的压缩 */
+        /* 暂时支持最多跨两字节的压缩 */ 
         highBit = ((uint8_t)srcData)>>(8-bitOffset%8);
         lowBit = (uint8_t)srcData & (0xFF >> (8-bitOffset%8));
         bufAddr[byteOffset + 1] |=  highBit;
@@ -386,6 +383,7 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoints2ReportData(dataPoint_t *dataPoints
     memset((uint8_t *)devStatusPtr->wBitBuf,0,sizeof(devStatusPtr->wBitBuf));
 
     gizCompressValue(ONOFF_BYTEOFFSET,ONOFF_BITOFFSET,ONOFF_LEN,(uint8_t *)devStatusPtr,dataPoints->valueOnOff);
+    gizCompressValue(USB_BYTEOFFSET,USB_BITOFFSET,USB_LEN,(uint8_t *)devStatusPtr,dataPoints->valueUSB);
     gizByteOrderExchange((uint8_t *)devStatusPtr->wBitBuf,sizeof(devStatusPtr->wBitBuf));
 
 
@@ -410,9 +408,9 @@ void ICACHE_FLASH_ATTR gizWiFiStatus(uint16_t value)
     wifi_status_t status;
     static wifi_status_t lastStatus;
 
-    if(NULL != value)
+    if(0 != value)
     {
-        status.value = value;
+        status.value = gizProtocolExchangeBytes(value); 
 
         os_printf("@@@@ GAgentStatus[hex]:%02x | [Bin]:%d,%d,%d,%d,%d,%d \r\n", status.value, status.types.con_m2m, status.types.con_route, status.types.binding, status.types.onboarding, status.types.station, status.types.softap);
 
@@ -585,14 +583,14 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoint2Event(gizwitsIssued_t *issuedData, 
 
 
 
-
-
-    if(0x01 == issuedData->attrFlags.flagTimer)
+    if(0x01 == issuedData->attrFlags.flagUSB)
     {
-        info->event[info->num] = EVENT_TIMER;
+        info->event[info->num] = EVENT_USB;
         info->num++;
-        memcpy((uint8_t *)dataPoints->valueTimer,issuedData->attrVals.valueTimer,sizeof(issuedData->attrVals.valueTimer));
+        dataPoints->valueUSB = gizDecompressionValue(USB_BYTEOFFSET,USB_BITOFFSET,USB_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
     }
+
+
 
     return 0;
 }
@@ -621,9 +619,9 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         os_printf("valueOnOff Changed\n");
         ret = 1;
     }
-    if(0 != memcmp((uint8_t *)&last->valueTimer,(uint8_t *)&cur->valueTimer,sizeof(last->valueTimer)))
+    if(last->valueUSB != cur->valueUSB)
     {
-        os_printf("valueTimer Changed\n");
+        os_printf("valueUSB Changed\n");
         ret = 1;
     }
 
@@ -641,6 +639,15 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         if(gizGetTimerCount()-lastReportTime >= REPORT_TIME_MAX)
         {
             os_printf("Consumption Changed\n");
+            lastReportTime = gizGetTimerCount();
+            ret = 1;
+        }
+    }
+    if(0 != memcmp((uint8_t *)&last->valueTimer,(uint8_t *)&cur->valueTimer,sizeof(last->valueTimer)))
+    {
+        if(gizGetTimerCount()-lastReportTime >= REPORT_TIME_MAX)
+        {
+            os_printf("valueTimer Changed");
             lastReportTime = gizGetTimerCount();
             ret = 1;
         }
@@ -683,17 +690,10 @@ int32_t ICACHE_FLASH_ATTR gizIssuedProcess(uint8_t *inData, uint32_t inLen,uint8
             break;
             
         case ACTION_READ_DEV_STATUS:
-        	gizDataPoints2ReportData(&gizwitsProtocol.gizLastDataPoint,&gizwitsProtocol.reportData.devStatus);
-        	gizwitsProtocol.reportData.action = ACTION_READ_DEV_STATUS_ACK;
-        	gizwitsProtocol.reportData.devStatus.valueTimer[0] = localtaskInfo.cdCount+localtaskInfo.tmCount;
-        	os_printf("ACTION_READ_DEV_STATUS report!!!! TaskSum:%d\n",gizwitsProtocol.reportData.devStatus.valueTimer[0]);
-        	os_memcpy((uint8_t *)(&gizwitsProtocol.reportData.devStatus.valueTimer)+1, (uint8_t *)&localtaskInfo.timertaskBox, TIMER_SIZE-1);
-//        	os_memcpy(&gizwitsProtocol.reportData.devStatus.valueSystime,&currentDataPoint.valueSystime,4);
-//        	os_memcpy(&gizwitsProtocol.reportData.devStatus.wBitBuf,&currentDataPoint.valueOnOff,1);
-//        	os_memcpy(&currentDataPoint,&gizwitsProtocol.reportData.devStatus,sizeof(dataPoint_t));
-//        	os_memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, &gizwitsProtocol.reportData.devStatus, sizeof(gizwitsReport_t));
-        	os_memcpy(outData, (uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
-        	*outLen = sizeof(gizwitsReport_t);
+            gizDataPoints2ReportData(&gizwitsProtocol.gizLastDataPoint,&gizwitsProtocol.reportData.devStatus);
+            gizwitsProtocol.reportData.action = ACTION_READ_DEV_STATUS_ACK;
+            os_memcpy(outData, (uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
+            *outLen = sizeof(gizwitsReport_t);
             break;
             
         case ACTION_W2D_TRANSPARENT_DATA: //透传
@@ -711,20 +711,6 @@ int32_t ICACHE_FLASH_ATTR gizIssuedProcess(uint8_t *inData, uint32_t inLen,uint8
     }
 
     return 0;
-}
-
-/**
-* @brief 获得系统时间戳
-* @param none
-* @return 返回uint32_t型的系统时间
-*/
-uint32_t ICACHE_FLASH_ATTR gizGetTimeStamp(void)
-{
-    _tm tmValue;
-
-    gagentGetNTP(&tmValue);
-
-    return tmValue.ntp;
 }
 
 /**
@@ -788,9 +774,6 @@ void ICACHE_FLASH_ATTR gizTask(os_event_t * events)
         gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
         gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
         break;
-	case SIG_DO_TASK:
-//		do_Task();
-		break;
     default:
         os_printf("---error sig! ---\n");
         break;
@@ -806,19 +789,41 @@ void ICACHE_FLASH_ATTR gizTask(os_event_t * events)
 
 * 用户可以调用该接口使WiFi模组进入相应的配置模式或者复位模组
 
-* @param[in] mode 配置模式选择：0x0， 模组复位 ;0x01， SoftAp模式 ;0x02， AirLink模式
+* @param[in] mode 配置模式选择：0x0， 模组复位 ;0x01， SoftAp模式 ;0x02， AirLink模式; 0x03 , 模组进入产测; 0x04:允许用户绑定设备
 * @return 错误命令码
 */
 void ICACHE_FLASH_ATTR gizwitsSetMode(uint8_t mode)
 {
-    if(mode == WIFI_RESET_MODE)
+    switch(mode)
     {
-        gagentReset();
+        case WIFI_RESET_MODE:
+            gagentReset();
+            break;
+        case WIFI_SOFTAP_MODE:
+        case WIFI_AIRLINK_MODE:
+        case WIFI_PRODUCTION_TEST:
+            gagentConfig(mode);
+            break;
+        case WIFI_NINABLE_MODE:
+            GAgentEnableBind();
+            break;
+        default :
+            break;
     }
-    else if((mode == WIFI_SOFTAP_MODE)||(mode == WIFI_AIRLINK_MODE))
-    {
-        gagentConfig(mode);
-    } 
+}
+
+/**
+* @brief 获取网络时间戳接口
+* @param[in] none
+* @return none
+*/
+uint32_t ICACHE_FLASH_ATTR gizwitsGetTimeStamp(void)
+{
+    _tm tmValue;
+
+    gagentGetNTP(&tmValue);
+
+    return tmValue.ntp;
 }
 
 /**
@@ -834,10 +839,8 @@ void ICACHE_FLASH_ATTR gizwitsSetMode(uint8_t mode)
 void ICACHE_FLASH_ATTR gizwitsInit(void)
 {
     int16_t value = 0;
-
-    os_memset((uint8_t *)gizwitsProtocol.transparentBuff, 0, sizeof(gizwitsProtocol.transparentBuff));
-    os_memset((uint8_t *)&gizwitsProtocol.reportData, 0, sizeof(gizwitsReport_t));
-    gizwitsProtocol.transparentLen = 0;
+    struct devAttrs attrs;
+    os_memset((uint8_t *)&gizwitsProtocol, 0, sizeof(gizwitsProtocol_t));
 
     system_os_task(gizTask, USER_TASK_PRIO_2, gizwitsTaskQueue, gizwitsTaskQueueLen);
 
@@ -845,6 +848,21 @@ void ICACHE_FLASH_ATTR gizwitsInit(void)
     os_timer_disarm(&gizTimer);
     os_timer_setfn(&gizTimer, (os_timer_func_t *)gizTimerFunc, NULL);
     os_timer_arm(&gizTimer, MAX_SOC_TIMOUT, 1);
+
+    //Gagent
+    system_os_task(gagentProcessRun, USER_TASK_PRIO_1, TaskQueue, TaskQueueLen);
+
+    attrs.mBindEnableTime = gizProtocolExchangeBytes(NINABLETIME);
+    memset((uint8_t *)attrs.mDevAttr, 0, 8);
+    attrs.mDevAttr[7] |= DEV_IS_GATEWAY<<0;
+    attrs.mDevAttr[7] |= (0x01<<1);
+    os_memcpy(attrs.mstrDevHV, HARDWARE_VERSION, os_strlen(HARDWARE_VERSION));
+    os_memcpy(attrs.mstrDevSV, SOFTWARE_VERSION, os_strlen(SOFTWARE_VERSION));
+    os_memcpy(attrs.mstrP0Ver, P0_VERSION, os_strlen(P0_VERSION));
+    os_memcpy(attrs.mstrProductKey, PRODUCT_KEY, os_strlen(PRODUCT_KEY));
+    os_memcpy(attrs.mstrProtocolVer, PROTOCOL_VERSION, os_strlen(PROTOCOL_VERSION));
+    os_memcpy(attrs.mstrSdkVerLow, SDK_VERSION, os_strlen(SDK_VERSION));
+    gagentInit(attrs);
 
     os_printf("gizwitsInit OK \r\n");
 }
@@ -857,7 +875,7 @@ void ICACHE_FLASH_ATTR gizwitsInit(void)
 * @param [in] dataPoint 用户设备数据点
 * @return none
 */
-int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
+int8_t ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
 {
     if(NULL == dataPoint)
     {
@@ -867,17 +885,17 @@ int ICACHE_FLASH_ATTR gizwitsHandle(dataPoint_t *dataPoint)
     }
 
     //Regularly report conditional
-    if(ConServer){
-    	if((1 == gizCheckReport(dataPoint, (dataPoint_t *)&gizwitsProtocol.gizLastDataPoint)))
-		{
-			gizDataPoints2ReportData(dataPoint, &gizwitsProtocol.reportData.devStatus);
+    if((1 == gizCheckReport(dataPoint, (dataPoint_t *)&gizwitsProtocol.gizLastDataPoint)))
+    {
+        gizDataPoints2ReportData(dataPoint, &gizwitsProtocol.reportData.devStatus);
 
-			gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
-			gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
-			os_printf("Data Point Changed and report!!!!\n");
-			memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, (uint8_t *)dataPoint, sizeof(dataPoint_t));
-		}
+        gizwitsProtocol.reportData.action = ACTION_REPORT_DEV_STATUS;
+        gagentUploadData((uint8_t *)&gizwitsProtocol.reportData, sizeof(gizwitsReport_t));
+
+        memcpy((uint8_t *)&gizwitsProtocol.gizLastDataPoint, (uint8_t *)dataPoint, sizeof(dataPoint_t));
     }
+
+	return 0;
 }
 
 /**
