@@ -55,7 +55,6 @@ static uint16_t ICACHE_FLASH_ATTR keyStateRead(keys_typedef_t * keys)
     static uint8_t Key_Check = 0;
     static uint8_t Key_State = 0;
     static uint16_t Key_LongCheck = 0;
-    static uint16_t Key_LLongCheck = 0;
     uint16_t Key_press = 0; 
     uint16_t Key_return = 0;
     static uint16_t Key_Prev = 0;
@@ -94,7 +93,7 @@ static uint16_t ICACHE_FLASH_ATTR keyStateRead(keys_typedef_t * keys)
                 if(Key_press == Key_Prev)
                 {
                     Key_State = 2;
-//                    Key_return= Key_Prev | KEY_DOWN;
+                    Key_return= Key_Prev | KEY_DOWN;
                 }
                 else
                 {
@@ -127,32 +126,8 @@ static uint16_t ICACHE_FLASH_ATTR keyStateRead(keys_typedef_t * keys)
                 }
                 break;
                 
-                //
-            case 3:
-
-                if(Key_press != Key_Prev)
-                {
-                    Key_State = 0;
-                    Key_LLongCheck = 0;
-                    Key_return = Key_Prev | KEY_LONG;
-                    return Key_return;
-                }
-
-                if(Key_press == Key_Prev)
-                {
-                	Key_LLongCheck++;
-                    if(Key_LLongCheck >= (PRESS_LLONG_TIME / DEBOUNCE_TIME))    //长按3S (消抖30MS * 100)
-                    {
-                        Key_LLongCheck = 0;
-                        Key_State = 4;
-                        Key_return= Key_press |  KEY_LLONG;
-                        return Key_return;
-                    }
-                }
-                break;
-
                 //"还原初始"状态
-            case 4:
+            case 3:
                 if(Key_press != Key_Prev)
                 {
                     Key_State = 0;
@@ -217,24 +192,6 @@ void ICACHE_FLASH_ATTR gokitKeyHandle(keys_typedef_t * keys)
             }
         }
     }
-
-    //check long long button
-    if(key_value & KEY_LLONG)
-    {
-        for(i = 0; i < keys->keyTotolNum; i++)
-        {
-            if(G_IS_BIT_SET(key_value, keys->singleKey[i]->gpio_number))
-            {
-//                key callback function of long press
-                if(keys->singleKey[i]->llong_press)
-                {
-                    keys->singleKey[i]->llong_press();
-
-                    os_printf("[zs] callback long key: [%d][%d] \r\n", keys->singleKey[i]->gpio_id, keys->singleKey[i]->gpio_number);
-                }
-            }
-        }
-    }
 }
 
 /**
@@ -248,7 +205,7 @@ void ICACHE_FLASH_ATTR gokitKeyHandle(keys_typedef_t * keys)
 * @param [in] short_press 短按状态的回调函数地址
 * @return 单按键结构体指针
 */
-key_typedef_t * ICACHE_FLASH_ATTR keyInitOne(uint8 gpio_id, uint32 gpio_name, uint8 gpio_func, gokit_key_function llong_press , gokit_key_function long_press, gokit_key_function short_press)
+key_typedef_t * ICACHE_FLASH_ATTR keyInitOne(uint8 gpio_id, uint32 gpio_name, uint8 gpio_func, gokit_key_function llong_press, gokit_key_function long_press, gokit_key_function short_press)
 {
     static int8_t key_total = -1;
 
@@ -264,34 +221,12 @@ key_typedef_t * ICACHE_FLASH_ATTR keyInitOne(uint8 gpio_id, uint32 gpio_name, ui
     //Button trigger callback type
     singleKey->long_press = long_press;
     singleKey->short_press = short_press;
-    singleKey->llong_press = llong_press;
     
-    keyTotolNum++;
+    keyTotolNum++;    
 
     return singleKey;
 }
 
-//key_typedef_t * ICACHE_FLASH_ATTR keyInitOne(uint8 gpio_id, uint32 gpio_name, uint8 gpio_func, gokit_key_function long_press, gokit_key_function short_press)
-//{
-//    static int8_t key_total = -1;
-//
-//    key_typedef_t * singleKey = (key_typedef_t *)os_zalloc(sizeof(key_typedef_t));
-//
-//    singleKey->gpio_number = ++key_total;
-//
-//    //Platform-defined GPIO
-//    singleKey->gpio_id = gpio_id;
-//    singleKey->gpio_name = gpio_name;
-//    singleKey->gpio_func = gpio_func;
-//
-//    //Button trigger callback type
-//    singleKey->long_press = long_press;
-//    singleKey->short_press = short_press;
-//
-//    keyTotolNum++;
-//
-//    return singleKey;
-//}
 /**
 * @brief 按键驱动初始化
 
@@ -301,77 +236,40 @@ key_typedef_t * ICACHE_FLASH_ATTR keyInitOne(uint8 gpio_id, uint32 gpio_name, ui
 */
 void ICACHE_FLASH_ATTR keyParaInit(keys_typedef_t * keys)
 {
-    uint8 tem_i = 0;
-
+    uint8 tem_i = 0; 
+    
     if(NULL == keys)
     {
         return ;
     }
-
-    //init key timer
-    keys->key_timer_ms = KEY_TIMER_MS;
-    os_timer_disarm(&keys->key_timer);
-    os_timer_setfn(&keys->key_timer, (os_timer_func_t *)gokitKeyHandle, keys);
-
+    
+    //init key timer 
+    keys->key_timer_ms = KEY_TIMER_MS; 
+    os_timer_disarm(&keys->key_timer); 
+    os_timer_setfn(&keys->key_timer, (os_timer_func_t *)gokitKeyHandle, keys); 
+    
     keys->keyTotolNum = keyTotolNum;
-    os_printf(" keyNum:%d\n",keyTotolNum);
+
     //Limit on the number keys (Allowable number: 0~12)
-    if(KEY_MAX_NUMBER < keys->keyTotolNum)
+    if(KEY_MAX_NUMBER < keys->keyTotolNum) 
     {
-        keys->keyTotolNum = KEY_MAX_NUMBER;
+        keys->keyTotolNum = KEY_MAX_NUMBER; 
     }
-
+    
     //GPIO configured as a high level input mode
-    for(tem_i = 0; tem_i < keys->keyTotolNum; tem_i++)
+    for(tem_i = 0; tem_i < keys->keyTotolNum; tem_i++) 
     {
-        PIN_FUNC_SELECT(keys->singleKey[tem_i]->gpio_name, keys->singleKey[tem_i]->gpio_func);
-        GPIO_OUTPUT_SET(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id), 1);
-        PIN_PULLUP_EN(keys->singleKey[tem_i]->gpio_name);
-        GPIO_DIS_OUTPUT(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id));
-
-        os_printf("gpio_name %d \r\n", keys->singleKey[tem_i]->gpio_id);
+        PIN_FUNC_SELECT(keys->singleKey[tem_i]->gpio_name, keys->singleKey[tem_i]->gpio_func); 
+        GPIO_OUTPUT_SET(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id), 1); 
+        PIN_PULLUP_EN(keys->singleKey[tem_i]->gpio_name); 
+        GPIO_DIS_OUTPUT(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id)); 
+        
+        os_printf("gpio_name %d \r\n", keys->singleKey[tem_i]->gpio_id); 
     }
-
+    
     //key timer start
-    os_timer_arm(&keys->key_timer, keys->key_timer_ms, 1);
+    os_timer_arm(&keys->key_timer, keys->key_timer_ms, 1); 
 }
-//void ICACHE_FLASH_ATTR keyParaInit(keys_typedef_t * keys)
-//{
-//    uint8 tem_i = 0;
-//
-//    if(NULL == keys)
-//    {
-//        return ;
-//    }
-//
-//    //init key timer
-//    keys->key_timer_ms = KEY_TIMER_MS;
-//    os_timer_disarm(&keys->key_timer);
-//    os_timer_setfn(&keys->key_timer, (os_timer_func_t *)gokitKeyHandle, keys);
-//
-//    keys->keyTotolNum = keyTotolNum;
-//
-//    //Limit on the number keys (Allowable number: 0~12)
-//    if(KEY_MAX_NUMBER < keys->keyTotolNum)
-//    {
-//        keys->keyTotolNum = KEY_MAX_NUMBER;
-//    }
-//
-//    //GPIO configured as a high level input mode
-//    for(tem_i = 0; tem_i < keys->keyTotolNum; tem_i++)
-//    {
-//    	os_printf("keyTotolNum:%d\n",keys->keyTotolNum);
-//        PIN_FUNC_SELECT(keys->singleKey[tem_i]->gpio_name, keys->singleKey[tem_i]->gpio_func);
-//        GPIO_OUTPUT_SET(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id), 1);
-//        PIN_PULLUP_EN(keys->singleKey[tem_i]->gpio_name);
-//        GPIO_DIS_OUTPUT(GPIO_ID_PIN(keys->singleKey[tem_i]->gpio_id));
-//
-//        os_printf("gpio_name %d \r\n", keys->singleKey[tem_i]->gpio_id);
-//    }
-//
-//    //key timer start
-//    os_timer_arm(&keys->key_timer, keys->key_timer_ms, 1);
-//}
 
 /**
 * @brief 按键驱动测试
@@ -398,10 +296,10 @@ void ICACHE_FLASH_ATTR keyTest(void)
     
     //每初始化一个按键调用一次keyInitOne ,singleKey次序加一
     singleKey[0] = keyInitOne(KEY_0_IO_NUM, KEY_0_IO_MUX, KEY_0_IO_FUNC,
-    		 key1LongPress, key1ShortPress );
+                                key1LongPress, key1ShortPress);
                                 
     singleKey[1] = keyInitOne(KEY_1_IO_NUM, KEY_1_IO_MUX, KEY_1_IO_FUNC,
-    		 key2LongPress, key2ShortPress );
+                                key2LongPress, key2ShortPress);
                                 
     keys.key_timer_ms = KEY_TIMER_MS; //设置按键定时器周期 建议10ms
     keys.singleKey = singleKey; //完成按键成员赋值
