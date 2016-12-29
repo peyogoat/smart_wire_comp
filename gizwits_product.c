@@ -82,6 +82,11 @@ int8_t ICACHE_FLASH_ATTR gizwitsEventProcess(eventInfo_t *info, uint8_t *data, u
 
 
 
+      case EVENT_TIMER:
+        os_printf("Evt: EVENT_TIMER\n");
+        memcpy((uint8_t *)&currentDataPoint.valueTimer,(uint8_t *)&dataPointPtr->valueTimer,sizeof(currentDataPoint.valueTimer));
+        //user handle
+        break;
 
       case WIFI_SOFTAP:
         break;

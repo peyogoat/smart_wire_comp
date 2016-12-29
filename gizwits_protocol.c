@@ -592,6 +592,15 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoint2Event(gizwitsIssued_t *issuedData, 
 
 
 
+
+
+    if(0x01 == issuedData->attrFlags.flagTimer)
+    {
+        info->event[info->num] = EVENT_TIMER;
+        info->num++;
+        memcpy((uint8_t *)dataPoints->valueTimer,issuedData->attrVals.valueTimer,sizeof(issuedData->attrVals.valueTimer));
+    }
+
     return 0;
 }
 
@@ -624,6 +633,11 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         os_printf("valueUSB Changed\n");
         ret = 1;
     }
+    if(0 != memcmp((uint8_t *)&last->valueTimer,(uint8_t *)&cur->valueTimer,sizeof(last->valueTimer)))
+    {
+        os_printf("valueTimer Changed\n");
+        ret = 1;
+    }
 
     if(last->valueSystime != cur->valueSystime)
     {
@@ -639,15 +653,6 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         if(gizGetTimerCount()-lastReportTime >= REPORT_TIME_MAX)
         {
             os_printf("Consumption Changed\n");
-            lastReportTime = gizGetTimerCount();
-            ret = 1;
-        }
-    }
-    if(0 != memcmp((uint8_t *)&last->valueTimer,(uint8_t *)&cur->valueTimer,sizeof(last->valueTimer)))
-    {
-        if(gizGetTimerCount()-lastReportTime >= REPORT_TIME_MAX)
-        {
-            os_printf("valueTimer Changed");
             lastReportTime = gizGetTimerCount();
             ret = 1;
         }

@@ -123,6 +123,7 @@ typedef enum
   TRANSPARENT_DATA,                                 ///< 透传事件
   EVENT_ONOFF,
   EVENT_USB,
+  EVENT_TIMER,
   EVENT_TYPE_MAX                                    ///< 枚举成员数量计算 (用户误删)
 } EVENT_TYPE_T;
 
@@ -131,20 +132,22 @@ typedef enum
 typedef struct {
   bool valueOnOff;
   bool valueUSB;
+  uint8_t valueTimer[376];
   uint32_t valueSystime;
   uint32_t valueConsumption;
-  uint8_t valueTimer[376];
 } dataPoint_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中的标志位"attr_flags" */ 
 typedef struct {
   uint8_t flagOnOff:1;
   uint8_t flagUSB:1;
+  uint8_t flagTimer:1;
 } attrFlags_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中的数据值"attr_vals" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
+  uint8_t valueTimer[376];
 } attrVals_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中“P0协议区”的标志位"attr_flags" + 数据值"attr_vals" */
@@ -157,11 +160,11 @@ typedef struct {
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];                     ///< 可写型数据点 布尔和枚举变量 所占字节大小 
 
+  uint8_t valueTimer[376];
 
 
   uint16_t valueSystime;
   uint16_t valueConsumption;
-  uint8_t valueTimer[376];
 
 
 } devStatus_t;
