@@ -36,7 +36,7 @@
 /**@name Product Key (产品标识码)
 * @{
 */
-#define PRODUCT_KEY                             "35675a9a285b4fc0bdd6c939af3b7971"
+#define PRODUCT_KEY                             "d71cf85bb1424f978c8ab1883c4a72d2"
 /**@} */
 
 #define BUFFER_LEN_MAX                900
@@ -73,13 +73,29 @@ typedef enum
 /**@name 数据点相关定义
 * @{
 */
-#define ONOFF_BYTEOFFSET                    0
-#define ONOFF_BITOFFSET                     0
-#define ONOFF_LEN                           1
+#define K1_BYTEOFFSET                    0
+#define K1_BITOFFSET                     0
+#define K1_LEN                           1
+
+#define K2_BYTEOFFSET                    0
+#define K2_BITOFFSET                     1
+#define K2_LEN                           1
+
+#define K3_BYTEOFFSET                    0
+#define K3_BITOFFSET                     2
+#define K3_LEN                           1
+
+#define K4_BYTEOFFSET                    0
+#define K4_BITOFFSET                     3
+#define K4_LEN                           1
 
 #define USB_BYTEOFFSET                    0
-#define USB_BITOFFSET                     1
+#define USB_BITOFFSET                     4
 #define USB_LEN                           1
+
+#define ALL_BYTEOFFSET                    0
+#define ALL_BITOFFSET                     5
+#define ALL_LEN                           1
 
 
 #define SYSTIME_RATIO                         1
@@ -88,9 +104,9 @@ typedef enum
 #define SYSTIME_MAX                           1450
 
 #define CONSUMPTION_RATIO                         1
-#define CONSUMPTION_ADDITION                      1
+#define CONSUMPTION_ADDITION                      0
 #define CONSUMPTION_MIN                           0
-#define CONSUMPTION_MAX                           65534
+#define CONSUMPTION_MAX                           65535
 
 /**@} */
 
@@ -121,33 +137,45 @@ typedef enum
   WIFI_DISCON_APP,                                  ///< WiFi模块断开APP事件
   WIFI_RSSI,                                        ///< WiFi模块信号事件
   TRANSPARENT_DATA,                                 ///< 透传事件
-  EVENT_ONOFF,
+  EVENT_K1,
+  EVENT_K2,
+  EVENT_K3,
+  EVENT_K4,
   EVENT_USB,
-  EVENT_TIMER,
+  EVENT_ALL,
+  EVENT_TASK,
   EVENT_TYPE_MAX                                    ///< 枚举成员数量计算 (用户误删)
 } EVENT_TYPE_T;
 
 /** 用户区设备状态结构体*/
 #pragma pack(1)
 typedef struct {
-  bool valueOnOff;
+  bool valueK1;
+  bool valueK2;
+  bool valueK3;
+  bool valueK4;
   bool valueUSB;
-  uint8_t valueTimer[376];
+  bool valueALL;
+  uint8_t valueTask[376];
   uint32_t valueSystime;
   uint32_t valueConsumption;
 } dataPoint_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中的标志位"attr_flags" */ 
 typedef struct {
-  uint8_t flagOnOff:1;
+  uint8_t flagK1:1;
+  uint8_t flagK2:1;
+  uint8_t flagK3:1;
+  uint8_t flagK4:1;
   uint8_t flagUSB:1;
-  uint8_t flagTimer:1;
+  uint8_t flagALL:1;
+  uint8_t flagTask:1;
 } attrFlags_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中的数据值"attr_vals" */
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];
-  uint8_t valueTimer[376];
+  uint8_t valueTask[376];
 } attrVals_t;
 
 /** 对应协议“4.10 WiFi模组控制设备”中“P0协议区”的标志位"attr_flags" + 数据值"attr_vals" */
@@ -160,7 +188,7 @@ typedef struct {
 typedef struct {
   uint8_t wBitBuf[COUNT_W_BIT];                     ///< 可写型数据点 布尔和枚举变量 所占字节大小 
 
-  uint8_t valueTimer[376];
+  uint8_t valueTask[376];
 
 
   uint16_t valueSystime;

@@ -55,10 +55,46 @@ int8_t ICACHE_FLASH_ATTR gizwitsEventProcess(eventInfo_t *info, uint8_t *data, u
   {
     switch(info->event[i])
     {
-      case EVENT_ONOFF:
-        currentDataPoint.valueOnOff = dataPointPtr->valueOnOff;
-        os_printf("Evt: EVENT_ONOFF %d \n", currentDataPoint.valueOnOff);
-        if(0x01 == currentDataPoint.valueOnOff)
+      case EVENT_K1:
+        currentDataPoint.valueK1 = dataPointPtr->valueK1;
+        os_printf("Evt: EVENT_K1 %d \n", currentDataPoint.valueK1);
+        if(0x01 == currentDataPoint.valueK1)
+        {
+          //user handle
+        }
+        else
+        {
+          //user handle    
+        }
+        break;
+      case EVENT_K2:
+        currentDataPoint.valueK2 = dataPointPtr->valueK2;
+        os_printf("Evt: EVENT_K2 %d \n", currentDataPoint.valueK2);
+        if(0x01 == currentDataPoint.valueK2)
+        {
+          //user handle
+        }
+        else
+        {
+          //user handle    
+        }
+        break;
+      case EVENT_K3:
+        currentDataPoint.valueK3 = dataPointPtr->valueK3;
+        os_printf("Evt: EVENT_K3 %d \n", currentDataPoint.valueK3);
+        if(0x01 == currentDataPoint.valueK3)
+        {
+          //user handle
+        }
+        else
+        {
+          //user handle    
+        }
+        break;
+      case EVENT_K4:
+        currentDataPoint.valueK4 = dataPointPtr->valueK4;
+        os_printf("Evt: EVENT_K4 %d \n", currentDataPoint.valueK4);
+        if(0x01 == currentDataPoint.valueK4)
         {
           //user handle
         }
@@ -79,12 +115,24 @@ int8_t ICACHE_FLASH_ATTR gizwitsEventProcess(eventInfo_t *info, uint8_t *data, u
           //user handle    
         }
         break;
+      case EVENT_ALL:
+        currentDataPoint.valueALL = dataPointPtr->valueALL;
+        os_printf("Evt: EVENT_ALL %d \n", currentDataPoint.valueALL);
+        if(0x01 == currentDataPoint.valueALL)
+        {
+          //user handle
+        }
+        else
+        {
+          //user handle    
+        }
+        break;
 
 
 
-      case EVENT_TIMER:
-        os_printf("Evt: EVENT_TIMER\n");
-        memcpy((uint8_t *)&currentDataPoint.valueTimer,(uint8_t *)&dataPointPtr->valueTimer,sizeof(currentDataPoint.valueTimer));
+      case EVENT_TASK:
+        os_printf("Evt: EVENT_TASK\n");
+        memcpy((uint8_t *)&currentDataPoint.valueTask,(uint8_t *)&dataPointPtr->valueTask,sizeof(currentDataPoint.valueTask));
         //user handle
         break;
 

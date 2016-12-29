@@ -382,8 +382,12 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoints2ReportData(dataPoint_t *dataPoints
 
     memset((uint8_t *)devStatusPtr->wBitBuf,0,sizeof(devStatusPtr->wBitBuf));
 
-    gizCompressValue(ONOFF_BYTEOFFSET,ONOFF_BITOFFSET,ONOFF_LEN,(uint8_t *)devStatusPtr,dataPoints->valueOnOff);
+    gizCompressValue(K1_BYTEOFFSET,K1_BITOFFSET,K1_LEN,(uint8_t *)devStatusPtr,dataPoints->valueK1);
+    gizCompressValue(K2_BYTEOFFSET,K2_BITOFFSET,K2_LEN,(uint8_t *)devStatusPtr,dataPoints->valueK2);
+    gizCompressValue(K3_BYTEOFFSET,K3_BITOFFSET,K3_LEN,(uint8_t *)devStatusPtr,dataPoints->valueK3);
+    gizCompressValue(K4_BYTEOFFSET,K4_BITOFFSET,K4_LEN,(uint8_t *)devStatusPtr,dataPoints->valueK4);
     gizCompressValue(USB_BYTEOFFSET,USB_BITOFFSET,USB_LEN,(uint8_t *)devStatusPtr,dataPoints->valueUSB);
+    gizCompressValue(ALL_BYTEOFFSET,ALL_BITOFFSET,ALL_LEN,(uint8_t *)devStatusPtr,dataPoints->valueALL);
     gizByteOrderExchange((uint8_t *)devStatusPtr->wBitBuf,sizeof(devStatusPtr->wBitBuf));
 
 
@@ -393,7 +397,7 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoints2ReportData(dataPoint_t *dataPoints
 
 
 
-    memcpy((uint8_t *)devStatusPtr->valueTimer,(uint8_t *)&dataPoints->valueTimer,sizeof(dataPoints->valueTimer));
+    memcpy((uint8_t *)devStatusPtr->valueTask,(uint8_t *)&dataPoints->valueTask,sizeof(dataPoints->valueTask));
     return 0;
 }
 
@@ -574,11 +578,38 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoint2Event(gizwitsIssued_t *issuedData, 
             return -1;
         }
     }
-    if(0x01 == issuedData->attrFlags.flagOnOff)
+    if(0x01 == issuedData->attrFlags.flagK1)
     {
-        info->event[info->num] = EVENT_ONOFF;
+        info->event[info->num] = EVENT_K1;
         info->num++;
-        dataPoints->valueOnOff = gizDecompressionValue(ONOFF_BYTEOFFSET,ONOFF_BITOFFSET,ONOFF_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
+        dataPoints->valueK1 = gizDecompressionValue(K1_BYTEOFFSET,K1_BITOFFSET,K1_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
+    }
+
+
+
+    if(0x01 == issuedData->attrFlags.flagK2)
+    {
+        info->event[info->num] = EVENT_K2;
+        info->num++;
+        dataPoints->valueK2 = gizDecompressionValue(K2_BYTEOFFSET,K2_BITOFFSET,K2_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
+    }
+
+
+
+    if(0x01 == issuedData->attrFlags.flagK3)
+    {
+        info->event[info->num] = EVENT_K3;
+        info->num++;
+        dataPoints->valueK3 = gizDecompressionValue(K3_BYTEOFFSET,K3_BITOFFSET,K3_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
+    }
+
+
+
+    if(0x01 == issuedData->attrFlags.flagK4)
+    {
+        info->event[info->num] = EVENT_K4;
+        info->num++;
+        dataPoints->valueK4 = gizDecompressionValue(K4_BYTEOFFSET,K4_BITOFFSET,K4_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
     }
 
 
@@ -592,13 +623,22 @@ static int8_t ICACHE_FLASH_ATTR gizDataPoint2Event(gizwitsIssued_t *issuedData, 
 
 
 
-
-
-    if(0x01 == issuedData->attrFlags.flagTimer)
+    if(0x01 == issuedData->attrFlags.flagALL)
     {
-        info->event[info->num] = EVENT_TIMER;
+        info->event[info->num] = EVENT_ALL;
         info->num++;
-        memcpy((uint8_t *)dataPoints->valueTimer,issuedData->attrVals.valueTimer,sizeof(issuedData->attrVals.valueTimer));
+        dataPoints->valueALL = gizDecompressionValue(ALL_BYTEOFFSET,ALL_BITOFFSET,ALL_LEN,(uint8_t *)&issuedData->attrVals.wBitBuf,sizeof(issuedData->attrVals.wBitBuf));
+    }
+
+
+
+
+
+    if(0x01 == issuedData->attrFlags.flagTask)
+    {
+        info->event[info->num] = EVENT_TASK;
+        info->num++;
+        memcpy((uint8_t *)dataPoints->valueTask,issuedData->attrVals.valueTask,sizeof(issuedData->attrVals.valueTask));
     }
 
     return 0;
@@ -623,9 +663,24 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         return -1;
     }
     
-    if(last->valueOnOff != cur->valueOnOff)
+    if(last->valueK1 != cur->valueK1)
     {
-        os_printf("valueOnOff Changed\n");
+        os_printf("valueK1 Changed\n");
+        ret = 1;
+    }
+    if(last->valueK2 != cur->valueK2)
+    {
+        os_printf("valueK2 Changed\n");
+        ret = 1;
+    }
+    if(last->valueK3 != cur->valueK3)
+    {
+        os_printf("valueK3 Changed\n");
+        ret = 1;
+    }
+    if(last->valueK4 != cur->valueK4)
+    {
+        os_printf("valueK4 Changed\n");
         ret = 1;
     }
     if(last->valueUSB != cur->valueUSB)
@@ -633,9 +688,14 @@ static int8_t ICACHE_FLASH_ATTR gizCheckReport(dataPoint_t *cur, dataPoint_t *la
         os_printf("valueUSB Changed\n");
         ret = 1;
     }
-    if(0 != memcmp((uint8_t *)&last->valueTimer,(uint8_t *)&cur->valueTimer,sizeof(last->valueTimer)))
+    if(last->valueALL != cur->valueALL)
     {
-        os_printf("valueTimer Changed\n");
+        os_printf("valueALL Changed\n");
+        ret = 1;
+    }
+    if(0 != memcmp((uint8_t *)&last->valueTask,(uint8_t *)&cur->valueTask,sizeof(last->valueTask)))
+    {
+        os_printf("valueTask Changed\n");
         ret = 1;
     }
 
